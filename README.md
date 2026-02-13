@@ -11,6 +11,16 @@ Persistent project memory and lifecycle management for Claude Code. Run `/start`
 
 ---
 
+## Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/anombyte93/claude-session-init/main/install.sh | bash
+```
+
+Installs to `~/.claude/skills/start/`. Run the same command to upgrade. See [Installation](#installation) for version toggle and manual options.
+
+---
+
 ## What This Solves
 
 Claude Code has no persistent memory between sessions. Every time you start a new conversation, Claude starts from zero. This creates three problems:
@@ -138,6 +148,10 @@ AI-first developers, solopreneurs, and consultants who use Claude Code as their 
 ---
 
 ## Installation
+
+> **Recommended**: Use the one-liner from the [Install](#install) section above.
+
+### Clone & Install (alternative)
 
 ```bash
 git clone https://github.com/anombyte93/claude-session-init.git
