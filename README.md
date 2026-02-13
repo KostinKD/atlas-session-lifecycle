@@ -174,18 +174,35 @@ The installer records a last-checked timestamp. On each run, if more than 24 hou
 
 ### custom.md
 
-Create a `custom.md` file in the plugin root to modify `/start` behavior without editing the skill itself. Instructions are plain English under three headings:
+Edit `custom.md` in the plugin root (or `~/.claude/skills/start/custom.md` for skill installs) to modify `/start` behavior. Write plain English instructions — no code needed. The AI reads these at each lifecycle phase and follows them.
+
+Three headings control when your instructions apply:
 
 ```markdown
 ## During Init
-- (your init-phase customizations)
+- After brainstorming, always suggest a git branching strategy
+- Skip file organization for monorepo projects
+- Always ask about deployment target (local, cloud, edge)
 
 ## During Reconcile
-- (your reconcile-phase customizations)
+- Check for uncommitted changes before assessing soul purpose
+- If soul purpose mentions "API", verify endpoints are documented
+- Always show a progress percentage estimate
 
 ## Always
-- (applied in both modes)
+- Keep tone direct and concise. No fluff.
+- When creating session context entries, include the git branch name
+- Never suggest closing a soul purpose unless all tests pass
 ```
+
+**How it works**: The skill reads `custom.md` at specific points — during init (after session-context is bootstrapped), during reconcile (after reading context, before assessment), and always (both modes). Your instructions augment the default behavior; they don't replace the skill logic.
+
+**Examples of what you can customize**:
+- Tone and verbosity of responses
+- Extra questions to ask during brainstorm
+- Conditions for when to suggest soul purpose closure
+- Project-specific checks during reconcile
+- Integration with other tools or workflows
 
 ### Ralph Loop
 
