@@ -91,11 +91,17 @@ Store as `RALPH_MODE`, `RALPH_INTENSITY` (default to "Small" if Automatic but no
 The brainstorm itself runs AFTER silent execution (Step 3) so session-context exists.
 Store `BRAINSTORM_WEIGHT` and `BRAINSTORM_CONTEXT` for use in Step 4.
 
-### File organization (only if `root_file_count > 10`)
+### File organization (only if `root_file_count > 15`)
 
-Use an Explore agent to scan root files and propose a move map. Present to user for approval.
-If approved, use a Bash agent to execute `mkdir -p` + `git mv`/`mv` operations.
-If skipped or root_file_count <= 10: no file moves.
+Run the clutter check:
+
+```bash
+python3 SESSION_SCRIPT check-clutter
+```
+
+If `status` is "cluttered", present the grouped move map to the user for approval (same flow as RECONCILE mode cleanup — see "Root Cleanup Check" under RECONCILE Step 1). Execute moves with `git mv` if `is_git`, otherwise `mv`.
+
+If skipped or `root_file_count <= 15` or `status` is "clean": no file moves.
 
 ## Step 3: Silent Execution
 
@@ -205,6 +211,41 @@ Returns JSON with: `soul_purpose`, `has_archived_purposes`, `active_context_summ
 
 **Then read the plugin's `custom.md`** if it exists, and follow any instructions under "During Reconcile".
 
+### Root Cleanup Check
+
+After read-context, check if the root directory has accumulated clutter. Use the `root_file_count` from preflight (already available).
+
+**If `root_file_count > 15`**: Run the clutter check silently:
+
+```bash
+python3 SESSION_SCRIPT check-clutter
+```
+
+Returns JSON with: `status` ("clean" or "cluttered"), `moves_by_dir` (files grouped by target directory), `deletable` (backup files to remove), `summary`.
+
+**If `status` is "cluttered"**: Present the move map to the user as part of Step 3 questions. Format it as a concise summary:
+
+"Your project root has [N] misplaced files. Proposed cleanup: [M] docs → docs/archive/, [P] screenshots → docs/screenshots/, [Q] scripts → scripts/, [R] to delete. Approve cleanup?"
+- Options: "Yes, clean up", "Show details first", "Skip"
+
+**If "Show details first"**: Display the full `moves_by_dir` grouped listing, then re-ask with "Yes, clean up" / "Skip".
+
+**If "Yes, clean up"**: Execute moves silently using Bash:
+```bash
+# Create target directories
+mkdir -p docs/archive docs/screenshots docs/reports scripts scripts/db logs
+
+# Move files (use git mv if is_git, otherwise mv)
+git mv <file> <target>  # for each move in the moves list
+
+# Delete backup files
+rm <file>  # for each file in deletable list
+```
+
+**If "Skip"**: Continue to Step 2 without cleanup.
+
+**If `root_file_count <= 15` or `status` is "clean"**: Skip silently. No output.
+
 ## Step 2: Directive Check + Self-Assessment
 
 **If DIRECTIVE is non-empty (3+ words) AND `status_hint` is `no_purpose`**:
@@ -304,6 +345,7 @@ All commands output JSON. Run from project root.
 | `read-context` | Read soul purpose + active context summary |
 | `harvest` | Scan active context for promotable content |
 | `archive --old-purpose "..." [--new-purpose "..."]` | Archive soul purpose, reset active context |
+| `check-clutter` | Scan root for misplaced files, return categorized move map |
 
 
 ---

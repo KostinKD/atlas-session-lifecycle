@@ -14,6 +14,7 @@ Usage:
     session-init.py read-context                            # Read soul purpose + active context
     session-init.py harvest                                 # Scan for promotable content
     session-init.py archive --old-purpose "..." [--new-purpose "..."]
+    session-init.py check-clutter                          # Scan root for misplaced files
 """
 
 import argparse
@@ -601,6 +602,137 @@ def cmd_archive(args):
     })
 
 
+# Files that legitimately belong at project root (case-insensitive basenames)
+ROOT_WHITELIST_EXACT = {
+    "claude.md", "readme.md", "license", "license.md", "cname",
+    "package.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml",
+    "tsconfig.json", "jsconfig.json", "next.config.js", "next.config.mjs",
+    "next.config.ts", "next-env.d.ts", "vercel.json", "netlify.toml",
+    "middleware.ts", "middleware.js", "instrumentation.ts",
+    "tailwind.config.js", "tailwind.config.ts", "tailwind.config.mjs",
+    "postcss.config.js", "postcss.config.mjs", "postcss.config.cjs",
+    "eslint.config.js", "eslint.config.mjs", ".eslintrc.js", ".eslintrc.json",
+    ".prettierrc", ".prettierrc.json", ".prettierrc.js",
+    "dockerfile", "docker-compose.yml", "docker-compose.yaml",
+    ".dockerignore", ".gitignore", ".gitattributes", ".editorconfig",
+    "makefile", "rakefile", "gemfile", "gemfile.lock",
+    "pyproject.toml", "setup.py", "setup.cfg", "requirements.txt",
+    "cargo.toml", "cargo.lock", "go.mod", "go.sum",
+    "sanity.config.ts", "sanity.config.js", "sanity.cli.ts", "sanity.cli.js",
+    "drizzle.config.ts", "drizzle.config.js",
+    "vitest.config.ts", "vitest.config.js", "jest.config.ts", "jest.config.js",
+    "playwright.config.ts", "playwright.config.js",
+    "index.html", "robots.txt", "sitemap.xml",
+    "components.json",
+    "railway.toml", "fly.toml", "render.yaml", "app.yaml",
+    "turbo.json", "nx.json", "lerna.json", "pnpm-workspace.yaml",
+    "vitest.setup.ts", "vitest.setup.js", "jest.setup.ts", "jest.setup.js",
+    "tsconfig.tsbuildinfo",
+    "commitlint.config.js", "lint-staged.config.js", ".lintstagedrc",
+    ".husky", ".changeset",
+    "biome.json", "deno.json", "bun.lockb",
+}
+
+# Patterns (prefixes/suffixes) that are OK at root
+ROOT_WHITELIST_PATTERNS = [
+    ".env",       # .env, .env.local, .env.production, etc.
+    ".npmrc",
+    ".nvmrc",
+    ".node-version",
+    ".python-version",
+    ".tool-versions",
+]
+
+# Category rules: (extension_set, target_directory, description)
+CLUTTER_CATEGORIES = [
+    ({".md"}, "docs/archive", "documentation/reports"),
+    ({".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico"}, "docs/screenshots", "screenshots/images"),
+    ({".sh", ".ps1", ".bash"}, "scripts", "shell scripts"),
+    ({".bak", ".orig", ".old"}, None, "backup files (suggest delete)"),
+    ({".log"}, "logs", "log files"),
+    ({".sql"}, "scripts/db", "SQL scripts"),
+    ({".html"}, "docs/reports", "HTML reports"),
+]
+
+
+def _is_whitelisted(filename):
+    """Check if a file belongs at project root."""
+    lower = filename.lower()
+    if lower in ROOT_WHITELIST_EXACT:
+        return True
+    for pattern in ROOT_WHITELIST_PATTERNS:
+        if lower.startswith(pattern):
+            return True
+    # Hidden files (dotfiles) generally belong at root
+    if filename.startswith("."):
+        return True
+    return False
+
+
+def _categorize_file(filename):
+    """Determine where a misplaced root file should go."""
+    suffix = Path(filename).suffix.lower()
+    for extensions, target_dir, description in CLUTTER_CATEGORIES:
+        if suffix in extensions:
+            return target_dir, description
+    # Uncategorized non-whitelisted files go to docs/archive
+    return "docs/archive", "uncategorized"
+
+
+def cmd_check_clutter(args):
+    """Scan root directory for files that violate structure rules."""
+    root = Path(".")
+    root_files = sorted(
+        f for f in root.iterdir()
+        if f.is_file() and not f.name.startswith("CLAUDE")
+    )
+
+    clutter = []
+    whitelisted = []
+    deletable = []
+
+    for f in root_files:
+        name = f.name
+        if _is_whitelisted(name):
+            whitelisted.append(name)
+            continue
+
+        target_dir, category = _categorize_file(name)
+        if target_dir is None:
+            # Suggest deletion (backup files, etc.)
+            deletable.append({"file": name, "category": category})
+        else:
+            clutter.append({
+                "file": name,
+                "target": f"{target_dir}/{name}",
+                "category": category,
+            })
+
+    # Group by target directory for cleaner output
+    moves_by_dir = {}
+    for item in clutter:
+        target = item["target"].rsplit("/", 1)[0]
+        if target not in moves_by_dir:
+            moves_by_dir[target] = []
+        moves_by_dir[target].append(item["file"])
+
+    _out({
+        "status": "clean" if not clutter and not deletable else "cluttered",
+        "root_file_count": len(root_files),
+        "whitelisted_count": len(whitelisted),
+        "clutter_count": len(clutter),
+        "deletable_count": len(deletable),
+        "moves": clutter,
+        "moves_by_dir": moves_by_dir,
+        "deletable": deletable,
+        "summary": (
+            f"{len(clutter)} files to move, {len(deletable)} to delete"
+            if clutter or deletable
+            else "Root directory is clean"
+        ),
+    })
+
+
 # -- Main ---------------------------------------------------------------------
 
 def main():
@@ -643,6 +775,9 @@ def main():
     arch_p.add_argument("--old-purpose", required=True)
     arch_p.add_argument("--new-purpose", default="")
 
+    # check-clutter
+    subparsers.add_parser("check-clutter", help="Scan root for misplaced files")
+
     args = parser.parse_args()
 
     commands = {
@@ -655,6 +790,7 @@ def main():
         "read-context": cmd_read_context,
         "harvest": cmd_harvest,
         "archive": cmd_archive,
+        "check-clutter": cmd_check_clutter,
     }
 
     commands[args.command](args)
