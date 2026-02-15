@@ -17,7 +17,7 @@
 
 set -euo pipefail
 
-REPO_OWNER="anombyte93"
+REPO_OWNER="KostinKD"
 REPO_NAME="atlas-session-lifecycle"
 SKILL_NAME="start"
 VERSION="2.0.0"
